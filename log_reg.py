@@ -117,12 +117,7 @@ def confusion_matrix_gen(model, dataset, class_names):
     plt.savefig("confusion_matrix.pdf")
 
 # === Training Loop ===
-def train_val_loop(model):
-    dataset = PCAFileDataset(args.pt_path)
-    train_size = int(args.train_size * len(dataset))
-    val_size = len(dataset) - train_size
-    train_ds, val_ds = random_split(dataset, [train_size, val_size])
-
+def train_val_loop(model, train_ds, val_ds):
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
 
@@ -163,12 +158,12 @@ def main():
         print("MPS not available, falling back to CPU.")
         device = torch.device("cpu")
 
-    # Determine input dim from one .pt file
-    sample_path = os.path.join(args.pt_path, "COVID")
-    for fname in os.listdir(sample_path):
-        if fname.endswith(".pt"):
-            example_tensor = torch.load(os.path.join(sample_path, fname))
-            break
+    dataset = PCAFileDataset(args.pt_path)
+    train_size = int(args.train_size * len(dataset))
+    val_size = len(dataset) - train_size
+    train_ds, val_ds = random_split(dataset, [train_size, val_size])
+
+    example_tensor, _ = dataset[0]
     input_dim = example_tensor.shape[0]
 
     model = SimpleClassifier(input_dim=input_dim, num_classes=2).to(device)
@@ -176,11 +171,11 @@ def main():
     if args.load_checkpoint:
         model.load_state_dict(torch.load(args.load_checkpoint, map_location=device))
 
+    if args.epochs != 0:
+        train_val_loop(model, train_ds, val_ds)
+    
     if args.conf_matrix:
-        dataset = PCAFileDataset(args.pt_path)
-        confusion_matrix_gen(model, dataset, ["Non-COVID", "COVID"])
-    else:
-        train_val_loop(model)
+        confusion_matrix_gen(model, val_ds, ["Non-COVID", "COVID"])
 
 if __name__ == "__main__":
     main()
